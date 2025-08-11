@@ -1,0 +1,52 @@
+# Copyright 2025 Dynamic Solutions Sp. z o.o. sp.k.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Release operator to StreamX GAR
+
+on:
+  push:
+    tags:
+      - 'streamxv[0-9]+.[0-9]+.[0-9]+-?*'
+
+jobs:
+  build:
+    name: Build image
+    runs-on: ubuntu-22.04
+    env:
+      IMAGE_TAG_BASE: europe-west1-docker.pkg.dev/streamx-releases/streamx-docker-releases/streamnative/pulsar-resources-operator
+
+    steps:
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          workload_identity_provider: ${{ secrets.GCP_STREAMX_RELEASES_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_STREAMX_RELEASES_RELEASE_DEPLOY_SA }}
+          token_format: access_token
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build image and Publish to DockerHub
+        run: |
+          _tag_version=${GITHUB_REF##*/}
+          export VERSION=${_tag_version/streamxv/}
+          export IMG=$IMAGE_TAG_BASE_DOCKERHUB:v$VERSION
+          docker buildx build \
+          --platform linux/amd64,linux/arm64 \
+          -t $IMAGE \
+          --push .
