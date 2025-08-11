@@ -14,39 +14,41 @@
 
 name: Release operator to StreamX GAR
 
+permissions:
+  contents: read
+  packages: write
+
 on:
-  push:
-    tags:
-      - 'streamxv[0-9]+.[0-9]+.[0-9]+-?*'
+  release:
+    types: [published]
 
 jobs:
-  build:
-    name: Build image
-    runs-on: ubuntu-22.04
-    env:
-      IMAGE_TAG_BASE: europe-west1-docker.pkg.dev/streamx-releases/streamx-docker-releases/streamnative/pulsar-resources-operator
+  build-and-publish:
+    name: Build & Publish Multi‑Arch Docker Image
+    runs-on: ubuntu-latest
 
     steps:
-      - id: 'auth'
-        name: 'Authenticate to Google Cloud'
-        uses: 'google-github-actions/auth@v2'
-        with:
-          workload_identity_provider: ${{ secrets.GCP_STREAMX_RELEASES_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_STREAMX_RELEASES_RELEASE_DEPLOY_SA }}
-          token_format: access_token
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      
-      - name: Build image and Publish to DockerHub
-        run: |
-          _tag_version=${GITHUB_REF##*/}
-          export VERSION=${_tag_version/streamxv/}
-          export IMG=$IMAGE_TAG_BASE_DOCKERHUB:v$VERSION
-          docker buildx build \
-          --platform linux/amd64,linux/arm64 \
-          -t $IMAGE \
-          --push .
+        with:
+          install: true
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker images
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ github.repository }}:${{ github.event.release.tag_name }}
+            ghcr.io/${{ github.repository_owner }}/${{ github.repository }}:latest
